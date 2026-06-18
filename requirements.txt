@@ -1,0 +1,21 @@
+fastapi
+uvicorn
+groq
+scikit-learn
+pandas
+numpy
+joblib
+openpyxl
+pydantic
+python-dotenv
+xgboost
+matplotlib
+seaborn
+
+
+# Deployment & Security
+slowapi
+uvicorn[standard]
+gunicorn
+bcrypt
+PyJWT
