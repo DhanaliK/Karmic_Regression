@@ -70,6 +70,11 @@ async def background_retrain_task():
 
 @app.on_event("startup")
 async def startup_event():
+    # Ensure all tables are created (like pending_predictions) if they don't exist
+    from database import engine
+    import models
+    models.Base.metadata.create_all(bind=engine)
+    
     start_scheduler()
     asyncio.create_task(background_retrain_task())
 
