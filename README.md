@@ -4,7 +4,7 @@ A highly advanced, full-stack psychological profiling platform that blends Machi
 
 This project was built to analyze user behavioral tendencies, map them against demographic/symbolic priors (like age, gender, and numerology), and generate a personalized, dynamic psychological evaluation.
 
-## 🚀 Features
+## Features
 
 - **Machine Learning Clustering**: Utilizes a trained Gaussian Mixture Model (GMM) and XGBoost pipeline to calculate "Psychological Entropy" and classify users into 6 distinct Karmic Archetypes (e.g., Fire Karma, Shadow Karma).
 - **LLM Narrative Generation**: Integrates with the Groq API (Llama 3) to synthesize ML probabilities into a deeply relatable, Gen-Z styled psychological reading.
@@ -61,13 +61,13 @@ npm run dev
 ```
 The frontend will run on `http://localhost:5173`.
 
-## 🧠 System Architecture
+## System Architecture
 
 1. **Stage 1 (Prior Calculation)**: Derives a baseline psychological blueprint based purely on demographic and symbolic priors.
 2. **Stage 2 (Micro-Questionnaire)**: A 9-question behavioral survey mapped to psychological heuristic features (Impulsivity, Ego, Self-Awareness).
 3. **Stage 3 (ML Inference)**: The vector is passed through the saved GMM models to calculate Archetypal Probabilities and Entropy.
 4. **Stage 4 (LLM Synthesis)**: The resulting probabilities and user answers are fed to Llama 3 via Groq to construct a highly personalized reading.
 
-## 📝 License
+##  License
 
 This project was developed as an academic submission for behavioral computing and machine learning architecture. All rights reserved.
