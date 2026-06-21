@@ -65,12 +65,10 @@ def register_user(request: Request, req: RegisterRequest, db: Session = Depends(
         db.add(new_otp)
         db.commit()
 
-        # Save initial answers as MonthlyInsight if provided
+        # Save initial answers as PendingPrediction to trigger background processing
         if req.answers and isinstance(req.answers, dict):
-            # Let's import the db helper lazily to avoid circular imports if needed
-            from db import save_monthly_insight
-            # They don't have a reflection yet, but we store their answers to track progress
-            save_monthly_insight(req.email, None, req.answers, "Initial baseline established. Awaiting first month's evolution.")
+            from db import save_pending_prediction
+            save_pending_prediction(req.email, 2, req.answers)
 
         # Send Email
         send_otp_email(req.email, otp_code, context="register")

@@ -89,3 +89,42 @@ def get_user_history(email):
         return history
     finally:
         db.close()
+
+def save_pending_prediction(email, stage, payload):
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        pending = PendingPrediction(
+            email=email,
+            stage=stage,
+            payload=json.dumps(payload),
+            status="pending"
+        )
+        db.add(pending)
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Database error in save_pending_prediction: {e}")
+        return False
+    finally:
+        db.close()
+
+def get_pending_predictions():
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        # Fetch up to 10 pending predictions to avoid overloading LLM
+        return db.query(PendingPrediction).filter(PendingPrediction.status == "pending").limit(10).all()
+    finally:
+        db.close()
+
+def update_pending_prediction_status(pred_id, status):
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        pending = db.query(PendingPrediction).filter(PendingPrediction.id == pred_id).first()
+        if pending:
+            pending.status = status
+            db.commit()
+    finally:
+        db.close()

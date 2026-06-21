@@ -61,3 +61,13 @@ class FeedbackLog(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="feedback_logs")
+
+class PendingPrediction(Base):
+    __tablename__ = "pending_predictions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True, nullable=False)
+    stage = Column(Integer, nullable=False) # 1 or 2
+    payload = Column(Text, nullable=False) # JSON payload of answers
+    status = Column(String, default="pending") # pending, completed, failed
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

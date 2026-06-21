@@ -37,6 +37,47 @@ def check_monthly_cycles():
     finally:
         db.close()
 
+def process_pending_predictions():
+    from db import get_pending_predictions, update_pending_prediction_status, save_monthly_insight
+    from llm_service import generate_stage_1_reflection, generate_stage_2_reflection
+    from symbolic_engine import generate_symbolic_priors
+    from email_service import send_email
+    
+    print("Running scheduled Pending Predictions check...")
+    pending_list = get_pending_predictions()
+    for pending in pending_list:
+        try:
+            payload = json.loads(pending.payload)
+            priors = generate_symbolic_priors(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'))
+            if 'ml_features' in priors:
+                priors.pop('ml_features')
+            
+            # Simple equal distribution for background fallback
+            ARCHETYPES = ["Fire Karma", "Shadow Karma", "Healing Karma", "Power Karma", "Wandering Karma", "Mirror Karma"]
+            sorted_probs = {arch: round(1.0 / len(ARCHETYPES), 2) for arch in ARCHETYPES}
+            
+            reflection = ""
+            if pending.stage == 1:
+                reflection = generate_stage_1_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, priors)
+            else:
+                reflection = generate_stage_2_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, payload, priors)
+                
+            save_monthly_insight(pending.email, None, payload, reflection)
+            update_pending_prediction_status(pending.id, "completed")
+            
+            # Send Email Notification
+            html_body = f"""
+            <h3>Your Karmic Reflection is Ready!</h3>
+            <p>Our psychological engine has successfully analyzed your behaviors and the deep reflection is now available in your portal.</p>
+            <p>Log in to <b>Karmic Regression</b> to discover your active karmic loops and archetypal insights.</p>
+            """
+            send_email(pending.email, "Your Karmic Reflection is Ready", html_body)
+            print(f"Successfully processed and emailed pending prediction for {pending.email}")
+            
+        except Exception as e:
+            print(f"Failed to process pending prediction {pending.id}: {e}")
+            # Leave as pending to try again later, or could mark as failed.
+
 def start_scheduler():
     scheduler = BackgroundScheduler()
     # Run once a day. For demo purposes, we will run it every 60 minutes.
@@ -45,6 +86,14 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=60),
         id='monthly_check',
         name='Check for users needing monthly updates',
+        replace_existing=True
+    )
+    # Check for pending LLM predictions every 5 minutes
+    scheduler.add_job(
+        process_pending_predictions,
+        trigger=IntervalTrigger(minutes=5),
+        id='pending_predictions',
+        name='Process pending API predictions',
         replace_existing=True
     )
     scheduler.start()

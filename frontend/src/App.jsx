@@ -103,8 +103,16 @@ function App() {
         q8: answers.q8,
         q9: answers.q9
       });
-      setStage2Result(res.data);
-      setStage(5);
+      if (res.data.status === 'pending') {
+        alert(res.data.message);
+        setStage2Result(res.data);
+        // Force them to register
+        setPortalActionText('Register');
+        setStage(6);
+      } else {
+        setStage2Result(res.data);
+        setStage(5);
+      }
     } catch (err) {
       console.error(err);
       alert('Error generating deeper reflection.');
@@ -357,31 +365,35 @@ function App() {
                     <input type="date" required
                       style={{ colorScheme: 'dark' }}
                       className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 transition-colors"
-                      value={userData.dob} onChange={e => setUserData({...userData, dob: e.target.value})}
+                      value={userData.dob} onChange={e => {
+                        const dobVal = e.target.value;
+                        let calculatedAge = userData.age;
+                        if (dobVal) {
+                          const dobDate = new Date(dobVal);
+                          const today = new Date();
+                          calculatedAge = today.getFullYear() - dobDate.getFullYear();
+                          const m = today.getMonth() - dobDate.getMonth();
+                          if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+                            calculatedAge--;
+                          }
+                        }
+                        setUserData({...userData, dob: dobVal, age: calculatedAge});
+                      }}
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 mb-2 font-medium">Current Age</label>
-                    <input type="number" required min="1" max="120"
+                    <label className="block text-slate-300 mb-2 font-medium">Gender</label>
+                    <select required
                       className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 transition-colors"
-                      value={userData.age} onChange={e => setUserData({...userData, age: e.target.value})}
-                      placeholder="e.g. 24"
-                    />
+                      value={userData.gender} onChange={e => setUserData({...userData, gender: e.target.value})}
+                    >
+                      <option value="" disabled>Select Gender...</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Non-binary">Non-binary</option>
+                      <option value="Other">Other / Prefer not to say</option>
+                    </select>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-2 font-medium">Gender</label>
-                  <select required
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 transition-colors"
-                    value={userData.gender} onChange={e => setUserData({...userData, gender: e.target.value})}
-                  >
-                    <option value="" disabled>Select Gender...</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Non-binary">Non-binary</option>
-                    <option value="Other">Other / Prefer not to say</option>
-                  </select>
                 </div>
                 
                 <button type="submit" className="w-full py-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-lg flex justify-center items-center gap-2 glow transition-all">

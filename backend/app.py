@@ -1,3 +1,4 @@
+import fastapi
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -135,9 +136,9 @@ class MonthlyReflectionRequest(BaseModel):
     gender: str
     answers: dict
 
-@app.post("/predict/stage1")
+@app.post("/predict/stage1", status_code=200)
 @limiter.limit("10/minute")
-async def predict_stage1(request: Request, req: Stage1Request):
+async def predict_stage1(request: Request, req: Stage1Request, response: fastapi.Response):
     try:
         priors = generate_symbolic_priors(req.name, req.dob, req.age, req.gender)
         ml_features = priors.pop('ml_features')
@@ -147,10 +148,24 @@ async def predict_stage1(request: Request, req: Stage1Request):
         sorted_probs = {arch: round(1.0 / len(ARCHETYPES), 2) for arch in ARCHETYPES}
         primary_archetype = "Unknown"
 
-        # Now LLM generates the narrative using the predicted probabilities!
-        reflection = generate_stage_1_reflection(req.name, req.dob, req.age, req.gender, sorted_probs, priors)
+        try:
+            # Now LLM generates the narrative using the predicted probabilities!
+            reflection = generate_stage_1_reflection(req.name, req.dob, req.age, req.gender, sorted_probs, priors)
+        except Exception as llm_error:
+            # If the API fails, return a 202 Accepted with pending flag
+            print(f"LLM API Error: {llm_error}")
+            response.status_code = 202
+            return {
+                "status": "pending",
+                "message": "Our psychological reflection engine is currently processing high volume. Please proceed to registration; we will securely store your responses and email your complete Karmic Reflection as soon as the system stabilizes.",
+                "archetype": primary_archetype,
+                "probabilities": sorted_probs,
+                "priors": priors,
+                "payload": req.model_dump()
+            }
         
         return {
+            "status": "success",
             "archetype": primary_archetype,
             "probabilities": sorted_probs,
             "priors": priors,
@@ -161,9 +176,9 @@ async def predict_stage1(request: Request, req: Stage1Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/predict/stage2")
+@app.post("/predict/stage2", status_code=200)
 @limiter.limit("10/minute")
-async def predict_stage2(request: Request, req: Stage2Request):
+async def predict_stage2(request: Request, req: Stage2Request, response: fastapi.Response):
     try:
         # Stage 2: Calculate 6 behavioral features from survey responses (Heuristic Map)
         imp = 5 if req.q1 in ['react immediately'] or req.q3 in ['act emotionally'] else 3
@@ -198,30 +213,40 @@ async def predict_stage2(request: Request, req: Stage2Request):
         # Generate demographic symbolic priors locally since we merged the flow
         priors = generate_symbolic_priors(req.name, req.dob, req.age, req.gender)
         
-        data_points = {
-            "Stress Response": req.q1,
-            "Recurring Pattern": req.q2,
-            "Decision Style": req.q3,
-            "Strongest Energy": req.q4,
-            "Emotional Trigger": req.q5,
-            "Regret Frequency": req.q6,
-            "Repeating Negatives": req.q7,
-            "Negative Outcome Response": req.q8,
-            "Mistake Avoidance Strategy": req.q9
-        }
-
-        reflection = generate_stage_2_reflection(
-            req.name, req.dob, req.age, req.gender, sorted_probs, data_points, priors, is_hybrid
-        )
+        # Remove ML features from priors if they exist so they aren't sent to frontend unnecessarily
+        if 'ml_features' in priors:
+            priors.pop('ml_features')
         
+        try:
+            # Generate the LLM reflection
+            reflection = generate_stage_2_reflection(
+                req.name, req.dob, req.age, req.gender,
+                sorted_probs, req.model_dump(), priors
+            )
+        except Exception as llm_error:
+            print(f"LLM API Error: {llm_error}")
+            response.status_code = 202
+            return {
+                "status": "pending",
+                "message": "Our psychological reflection engine is currently processing high volume. Please proceed to registration; we will securely store your responses and email your complete Karmic Reflection as soon as the system stabilizes.",
+                "archetype": primary_archetype,
+                "probabilities": sorted_probs,
+                "priors": priors,
+                "is_hybrid": is_hybrid,
+                "entropy": entropy,
+                "payload": req.model_dump()
+            }
+
         return {
+            "status": "success",
             "archetype": primary_archetype,
             "probabilities": sorted_probs,
-            "entropy": entropy,
+            "priors": priors,
             "is_hybrid": is_hybrid,
-            "features": {"Impulsiveness": imp, "Ego_Dominance": ego, "Self_Awareness": awa, "Empathy": emp, "Analytical_Planning": ana, "Adaptability": ada},
+            "entropy": entropy,
             "reflection": reflection
         }
+        
     except Exception as e:
         import traceback
         traceback.print_exc()
