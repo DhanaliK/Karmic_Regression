@@ -1,5 +1,5 @@
 import fastapi
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -9,6 +9,11 @@ from pydantic import BaseModel
 from typing import Optional
 import joblib
 import os
+from dotenv import load_dotenv
+
+ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(dotenv_path=ENV_PATH)
+
 import xgboost as xgb
 import pandas as pd
 import numpy as np
@@ -19,12 +24,16 @@ from sklearn.exceptions import InconsistentVersionWarning
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
-from db import save_feedback, subscribe_user, get_subscription, get_user_history, save_monthly_insight
+from db import (
+    save_feedback, subscribe_user, get_subscription, get_user_history,
+    save_monthly_insight, save_pending_prediction,
+)
 from llm_service import generate_stage_1_reflection, generate_stage_2_reflection, generate_adaptive_questions
 from symbolic_engine import generate_symbolic_priors
 import asyncio
 
 import auth_routes
+from auth import get_current_user
 from scheduler import start_scheduler
 
 app = FastAPI(title="Karmic Regression API")
@@ -114,6 +123,11 @@ class Stage2Request(BaseModel):
     q9: str
     # 'priors' is removed as it's now calculated internally
 
+class QueuePendingRequest(BaseModel):
+    type: str
+    payload: dict
+    email: Optional[str] = ""
+
 class FeedbackRequest(BaseModel):
     stage: int
     archetype: str
@@ -140,6 +154,19 @@ class MonthlyReflectionRequest(BaseModel):
     age: int
     gender: str
     answers: dict
+
+@app.post("/queue/pending", status_code=202)
+@limiter.limit("10/minute")
+async def queue_pending(request: Request, req: QueuePendingRequest, current_user = Depends(get_current_user)):
+    stage_by_type = {"stage1": 1, "stage2": 2, "monthly": 2}
+    stage = stage_by_type.get(req.type)
+    if stage is None:
+        raise HTTPException(status_code=400, detail="Unsupported pending request type.")
+    if req.email and req.email.lower() != current_user.email.lower():
+        raise HTTPException(status_code=403, detail="The queued email does not match the signed-in user.")
+
+    queued = save_pending_prediction(current_user.email, stage, req.payload)
+    return {"status": "queued", "request_type": req.type, **queued}
 
 @app.post("/predict/stage1", status_code=200)
 @limiter.limit("10/minute")
@@ -436,7 +463,9 @@ if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*50)
     print("KARMIC REGRESSION API STARTING")
-    print("Access locally at: http://127.0.0.1:8000")
-    print("Documentation: http://127.0.0.1:8000/docs")
+    backend_port = int(os.getenv("BACKEND_PORT", "8000"))
+    backend_host = os.getenv("BACKEND_HOST", "0.0.0.0")
+    print(f"Access locally at: http://127.0.0.1:{backend_port}")
+    print(f"Documentation: http://127.0.0.1:{backend_port}/docs")
     print("="*50 + "\n")
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app:app", host=backend_host, port=backend_port, reload=True)
