@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 load_dotenv(dotenv_path=env_path)
 
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "llama-3.1-8b-instant")
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 SYSTEM_PROMPT = """You are an emotionally intelligent behavioral reflection engine and karmic guide.
@@ -58,7 +59,7 @@ def generate_stage_1_reflection(name: str, dob: str, age: int, gender: str, prob
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        model="llama-3.1-8b-instant",
+        model=LLM_MODEL_NAME,
         temperature=0.7,
         max_tokens=1024,
     )
@@ -98,7 +99,7 @@ def generate_stage_2_reflection(name: str, dob: str, age: int, gender: str, prob
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        model="llama-3.1-8b-instant",
+        model=LLM_MODEL_NAME,
         temperature=0.7,
         max_tokens=1024,
     )
@@ -144,7 +145,7 @@ Return exactly 3 questions. Ensure raw JSON only.
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            model="llama-3.1-8b-instant",
+            model=LLM_MODEL_NAME,
             temperature=0.3,
             max_tokens=1024,
             response_format={"type": "json_object"}
