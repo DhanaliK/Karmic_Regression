@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=env_path)
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "yourkarma833@gmail.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
-def send_email(to_email: str, subject: str, html_body: str):
+def send_email(to_email: str, subject: str, html_body: str, message_id: str | None = None):
     if not SMTP_PASSWORD:
         print(f"Mock Email to {to_email}: {subject}")
         return True
@@ -19,6 +19,8 @@ def send_email(to_email: str, subject: str, html_body: str):
     msg['Subject'] = subject
     msg['From'] = f"Karmic Evolution <{SMTP_EMAIL}>"
     msg['To'] = to_email
+    if message_id:
+        msg['Message-ID'] = message_id
 
     part = MIMEText(html_body, 'html')
     msg.attach(part)
