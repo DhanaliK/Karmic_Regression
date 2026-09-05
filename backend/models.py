@@ -69,5 +69,5 @@ class PendingPrediction(Base):
     email = Column(String, index=True, nullable=False)
     stage = Column(Integer, nullable=False) # 1 or 2
     payload = Column(Text, nullable=False) # JSON payload of answers
-    status = Column(String, default="pending") # pending, completed, failed
+    status = Column(String, default="pending") # pending, email_pending, completed, failed
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
