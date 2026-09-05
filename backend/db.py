@@ -91,56 +91,55 @@ def get_user_history(email):
         db.close()
 
 def save_pending_prediction(email, stage, payload):
-      from models import PendingPrediction
-      db = SessionLocal()
-      try:
-          payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-          existing = db.query(PendingPrediction).filter(
-              PendingPrediction.email == email,
-              PendingPrediction.stage == stage,
-              PendingPrediction.payload == payload_json,
-              PendingPrediction.status.in_(["pending", "email_pending"]),
-          ).first()
-          if existing:
-              return {"id": existing.id, "deduplicated": True}
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        existing = db.query(PendingPrediction).filter(
+            PendingPrediction.email == email,
+            PendingPrediction.stage == stage,
+            PendingPrediction.payload == payload_json,
+            PendingPrediction.status.in_(["pending", "email_pending"]),
+        ).first()
+        if existing:
+            return {"id": existing.id, "deduplicated": True}
 
-          pending = PendingPrediction(
-              email=email,
-              stage=stage,
-              payload=payload_json,
-              status="pending"
-          )
-          db.add(pending)
-          db.commit()
-          db.refresh(pending)
-          return {"id": pending.id, "deduplicated": False}
-      except Exception as e:
-          db.rollback()
-          print(f"Database error in save_pending_prediction: {e}")
-          return {"id": None, "deduplicated": False}
-      finally:
-          db.close()
+        pending = PendingPrediction(
+            email=email,
+            stage=stage,
+            payload=payload_json,
+            status="pending"
+        )
+        db.add(pending)
+        db.commit()
+        db.refresh(pending)
+        return {"id": pending.id, "deduplicated": False}
+    except Exception as e:
+        db.rollback()
+        print(f"Database error in save_pending_prediction: {e}")
+        return {"id": None, "deduplicated": False}
+    finally:
+        db.close()
 
-    def get_pending_predictions():
-      from models import PendingPrediction
-      db = SessionLocal()
-      try:
-          # Include email_pending so a transient SMTP failure retries without
-          # regenerating the reflection or creating a duplicate insight.
-          return db.query(PendingPrediction).filter(
-              PendingPrediction.status.in_(["pending", "email_pending"])
-          ).order_by(PendingPrediction.created_at.asc()).limit(10).all()
-      finally:
-          db.close()
+def get_pending_predictions():
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        # Include email_pending so a transient SMTP failure retries without
+        # regenerating the reflection or creating a duplicate insight.
+        return db.query(PendingPrediction).filter(
+            PendingPrediction.status.in_(["pending", "email_pending"])
+        ).order_by(PendingPrediction.created_at.asc()).limit(10).all()
+    finally:
+        db.close()
 
-    def update_pending_prediction_status(pred_id, status):
-      from models import PendingPrediction
-      db = SessionLocal()
-      try:
-          pending = db.query(PendingPrediction).filter(PendingPrediction.id == pred_id).first()
-          if pending:
-              pending.status = status
-              db.commit()
-      finally:
-          db.close()
-    
+def update_pending_prediction_status(pred_id, status):
+    from models import PendingPrediction
+    db = SessionLocal()
+    try:
+        pending = db.query(PendingPrediction).filter(PendingPrediction.id == pred_id).first()
+        if pending:
+            pending.status = status
+            db.commit()
+    finally:
+        db.close()
