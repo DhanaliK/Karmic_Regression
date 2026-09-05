@@ -38,47 +38,65 @@ def check_monthly_cycles():
         db.close()
 
 def process_pending_predictions():
-    from db import get_pending_predictions, update_pending_prediction_status, save_monthly_insight
-    from llm_service import generate_stage_1_reflection, generate_stage_2_reflection
-    from symbolic_engine import generate_symbolic_priors
-    from email_service import send_email
-    
-    print("Running scheduled Pending Predictions check...")
-    pending_list = get_pending_predictions()
-    for pending in pending_list:
-        try:
-            payload = json.loads(pending.payload)
-            priors = generate_symbolic_priors(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'))
-            if 'ml_features' in priors:
-                priors.pop('ml_features')
-            
-            # Simple equal distribution for background fallback
-            ARCHETYPES = ["Fire Karma", "Shadow Karma", "Healing Karma", "Power Karma", "Wandering Karma", "Mirror Karma"]
-            sorted_probs = {arch: round(1.0 / len(ARCHETYPES), 2) for arch in ARCHETYPES}
-            
-            reflection = ""
-            if pending.stage == 1:
-                reflection = generate_stage_1_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, priors)
-            else:
-                reflection = generate_stage_2_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, payload, priors)
-                
-            save_monthly_insight(pending.email, None, payload, reflection)
-            update_pending_prediction_status(pending.id, "completed")
-            
-            # Send Email Notification
-            html_body = f"""
-            <h3>Your Karmic Reflection is Ready!</h3>
-            <p>Our psychological engine has successfully analyzed your behaviors and the deep reflection is now available in your portal.</p>
-            <p>Log in to <b>Karmic Regression</b> to discover your active karmic loops and archetypal insights.</p>
-            """
-            send_email(pending.email, "Your Karmic Reflection is Ready", html_body)
-            print(f"Successfully processed and emailed pending prediction for {pending.email}")
-            
-        except Exception as e:
-            print(f"Failed to process pending prediction {pending.id}: {e}")
-            # Leave as pending to try again later, or could mark as failed.
+      from db import get_pending_predictions, update_pending_prediction_status, save_monthly_insight
+      from llm_service import generate_stage_1_reflection, generate_stage_2_reflection
+      from symbolic_engine import generate_symbolic_priors
+      from email_service import send_email
 
-def start_scheduler():
+      print("Running scheduled Pending Predictions check...")
+      pending_list = get_pending_predictions()
+      for pending in pending_list:
+          try:
+              subject = "Your Karmic Reflection is Ready"
+              html_body = """
+              <h3>Your Karmic Reflection is Ready!</h3>
+              <p>Our psychological engine has successfully analyzed your behaviors and the deep reflection is now available in your portal.</p>
+              <p>Log in to <b>Karmic Regression</b> to discover your active karmic loops and archetypal insights.</p>
+              """
+              message_id = f"<karmic-prediction-{pending.id}@karmic-regression>"
+
+              # An email_pending row already has its insight. Retry only SMTP so
+              # transient mail failures cannot regenerate or duplicate insights.
+              if pending.status == "email_pending":
+                  if send_email(pending.email, subject, html_body, message_id=message_id):
+                      update_pending_prediction_status(pending.id, "completed")
+                      print(f"Delivered queued resolution email for {pending.email}")
+                  else:
+                      print(f"Resolution email still unavailable for pending prediction {pending.id}")
+                  continue
+
+              payload = json.loads(pending.payload)
+              priors = generate_symbolic_priors(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'))
+              if 'ml_features' in priors:
+                  priors.pop('ml_features')
+
+              ARCHETYPES = ["Fire Karma", "Shadow Karma", "Healing Karma", "Power Karma", "Wandering Karma", "Mirror Karma"]
+              sorted_probs = {arch: round(1.0 / len(ARCHETYPES), 2) for arch in ARCHETYPES}
+
+              if pending.stage == 1:
+                  reflection = generate_stage_1_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, priors)
+              else:
+                  reflection = generate_stage_2_reflection(payload.get('name'), payload.get('dob'), payload.get('age'), payload.get('gender'), sorted_probs, payload, priors)
+
+              if not save_monthly_insight(pending.email, None, payload, reflection):
+                  raise RuntimeError("Could not save generated reflection")
+
+              # Commit the durable outbox state before attempting SMTP. If the
+              # process stops after this point, the next scheduler tick sends the
+              # same deterministic message instead of regenerating the insight.
+              update_pending_prediction_status(pending.id, "email_pending")
+              if send_email(pending.email, subject, html_body, message_id=message_id):
+                  update_pending_prediction_status(pending.id, "completed")
+                  print(f"Successfully processed and emailed pending prediction for {pending.email}")
+              else:
+                  print(f"Reflection saved; resolution email will retry for {pending.email}")
+
+          except Exception as e:
+              print(f"Failed to process pending prediction {pending.id}: {e}")
+              # Keep pending rows retryable. A completed insight is moved to
+              # email_pending before SMTP so it cannot be generated twice.
+
+    def start_scheduler():
     scheduler = BackgroundScheduler()
     # Run once a day. For demo purposes, we will run it every 60 minutes.
     scheduler.add_job(
